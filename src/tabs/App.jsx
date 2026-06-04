@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Badge, CommentDrawer } from './components/UI';
+import { Badge, CommentDrawer } from '../components/UI';
 import ProfileSelector from './components/ProfileSelector';
-import PlanningTab from './tabs/PlanningTab';
-import FieldworkTab from './tabs/FieldworkTab';
-import ReportingTab from './tabs/ReportingTab';
-import ReviewCommentsTab from './tabs/ReviewCommentsTab';
-import PortfolioTab from './tabs/PortfolioTab';
-import { computePlanningGates, PLANNING_GATE_KEYS } from './utils/planningGates';
+import PlanningTab from './PlanningTab';
+import FieldworkTab from './FieldworkTab';
+import ReportingTab from './ReportingTab';
+import ReviewCommentsTab from './ReviewCommentsTab';
+import PortfolioTab from './PortfolioTab';
 import {
   fetchUsers, fetchAudits, fetchSignOffs, fetchReviewComments,
   fetchIssues, fetchQueries, fetchWorkingPapers, fetchAuditMetadata,
@@ -20,7 +19,7 @@ import {
   subscribeToAudits, subscribeToIssues, subscribeToQueries,
   subscribeToComments, subscribeToSignOffs, subscribeToWorkingPapers,
   unsubscribeAll,
-} from './data/dataService';
+} from '../data/dataService';
 
 const PROFILE_KEY = 'ni_audit_tool_user_id';
 
@@ -254,33 +253,6 @@ export default function App() {
         ...prev,
         metadata: { ...prev.metadata, [dbKey]: value, [key]: value },
       } : prev);
-
-      // ── Auto-revoke planning sign-off if a gate-affecting key now fails ──
-      // Only check keys that feed into planning gates
-      if (PLANNING_GATE_KEYS.has(key)) {
-        const planningSignOff = signOffs.find(
-          so => so.audit_id === auditId && so.tab === 'Planning'
-        );
-        // Only act if the planning phase has been auditor-signed
-        if (planningSignOff?.auditor_signed_at) {
-          // Build the merged auditData with the new value applied so we
-          // evaluate gates against the state that was just saved
-          const mergedAuditData = {
-            ...engagementData?.metadata,
-            [key]:   value,
-            [dbKey]: value,
-          };
-          const gates       = computePlanningGates(mergedAuditData);
-          const anyFailed   = gates.some(g => !g.passed);
-          if (anyFailed) {
-            // Revoke auditor tier — cascades to reviewer + HIA in dataService
-            await revokeSignOff(planningSignOff.id, 'auditor', currentUser.id);
-            // Refresh sign-offs in local state so progress circles update immediately
-            const freshSignOffs = await fetchSignOffs();
-            setSignOffs(freshSignOffs);
-          }
-        }
-      }
     } catch (err) { console.error('Update audit data error:', err); }
   }
 
